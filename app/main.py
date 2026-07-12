@@ -1,10 +1,8 @@
 from fastapi import FastAPI
 from app.database import Base, engine
-from app.routers import auth, clients, projects, ingest
-from app.routers import auth, clients, projects, ingest, budget
 from app import models  # noqa: F401
-from app.routers import auth, clients, projects
-from app.routers import auth, clients, projects, ingest, budget, proxy
+from fastapi.staticfiles import StaticFiles
+from app.routers import auth, clients, projects, ingest, budget, proxy, analytics
 
 app = FastAPI(title="LCIS", version="0.1.0")
 
@@ -22,3 +20,5 @@ app.include_router(projects.router)
 app.include_router(ingest.router)
 app.include_router(budget.router)
 app.include_router(proxy.router)
+app.include_router(analytics.router)
+app.mount("/ui", StaticFiles(directory="static", html=True), name="ui")

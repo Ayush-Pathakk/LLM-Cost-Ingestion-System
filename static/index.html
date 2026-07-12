@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>LCIS — Cost Meter</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A0C0F; --panel:#12151A; --panel2:#161A21; --line:#23272E;
+    --amber:#F2A93B; --teal:#35C79B; --red:#E5484D;
+    --text:#E8EAED; --dim:#8B92A0;
+  }
+  body{ background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; }
+  .font-display{ font-family:'Space Grotesk',sans-serif; }
+  .font-mono{ font-family:'JetBrains Mono',monospace; }
+  .panel{ background:var(--panel); border:1px solid var(--line); border-radius:10px; }
+  .glow-amber{ text-shadow:0 0 18px rgba(242,169,59,0.35); }
+  ::-webkit-scrollbar{ width:8px; height:8px; }
+  ::-webkit-scrollbar-thumb{ background:var(--line); border-radius:4px; }
+  .meter{
+    width:120px; height:120px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    position:relative;
+  }
+  .meter::before{
+    content:''; position:absolute; inset:0; border-radius:50%;
+    background: conic-gradient(var(--gauge-color, var(--amber)) calc(var(--pct,0) * 1%), var(--line) 0);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 10px), #000 calc(100% - 9px));
+    mask: radial-gradient(farthest-side, transparent calc(100% - 10px), #000 calc(100% - 9px));
+  }
+  .tick-fade{ animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn{ from{opacity:0; transform:translateY(4px)} to{opacity:1; transform:translateY(0)} }
+  .nav-item{ color:var(--dim); transition:.15s; }
+  .nav-item:hover, .nav-item.active{ color:var(--text); background:var(--panel2); }
+</style>
+</head>
+<body class="min-h-screen flex">
+
+  <!-- Sidebar -->
+  <aside class="w-56 shrink-0 border-r border-[var(--line)] p-5 flex flex-col gap-1 sticky top-0 h-screen">
+    <div class="flex items-center gap-2 mb-8">
+      <div class="w-8 h-8 rounded-md bg-[var(--amber)] flex items-center justify-center font-display font-bold text-black text-sm">L</div>
+      <span class="font-display font-semibold text-lg">LCIS</span>
+    </div>
+    <button class="nav-item active text-left px-3 py-2 rounded-md text-sm font-medium" data-tab="overview">Overview</button>
+    <button class="nav-item text-left px-3 py-2 rounded-md text-sm font-medium" data-tab="clients">Clients</button>
+    <button class="nav-item text-left px-3 py-2 rounded-md text-sm font-medium" data-tab="models">Models</button>
+    <button class="nav-item text-left px-3 py-2 rounded-md text-sm font-medium" data-tab="logs">Request Log</button>
+    <div class="mt-auto text-xs text-[var(--dim)] font-mono leading-relaxed pt-4 border-t border-[var(--line)]">
+      workspace key<br>
+      <input id="apiKeyInput" type="password" placeholder="paste ingestion/API key"
+        class="w-full mt-1 bg-[var(--panel2)] border border-[var(--line)] rounded px-2 py-1.5 text-[var(--text)] text-xs font-mono focus:outline-none focus:border-[var(--amber)]">
+      <button id="saveKeyBtn" class="mt-2 w-full bg-[var(--panel2)] hover:bg-[var(--line)] rounded px-2 py-1.5 text-xs">Connect</button>
+      <div id="connStatus" class="mt-2 text-[10px]">not connected</div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="flex-1 p-8 max-w-6xl">
+    <!-- Burn strip -->
+    <div class="panel p-6 mb-8 flex items-center justify-between tick-fade">
+      <div>
+        <div class="text-xs uppercase tracking-widest text-[var(--dim)] mb-1">Total metered spend</div>
+        <div id="totalCost" class="font-mono text-4xl font-bold glow-amber text-[var(--amber)]">$0.000000</div>
+      </div>
+      <div class="flex gap-8 text-right">
+        <div>
+          <div class="text-xs uppercase tracking-widest text-[var(--dim)] mb-1">Requests</div>
+          <div id="totalReq" class="font-mono text-2xl">0</div>
+        </div>
+        <div>
+          <div class="text-xs uppercase tracking-widest text-[var(--dim)] mb-1">Tokens</div>
+          <div id="totalTok" class="font-mono text-2xl">0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Overview tab -->
+    <section id="tab-overview" class="tab-panel">
+      <h2 class="font-display text-lg font-semibold mb-4">Client meters</h2>
+      <div id="clientMeters" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-10"></div>
+    </section>
+
+    <!-- Clients tab -->
+    <section id="tab-clients" class="tab-panel hidden">
+      <h2 class="font-display text-lg font-semibold mb-4">Clients — cost breakdown</h2>
+      <div class="panel p-5">
+        <table class="w-full text-sm font-mono">
+          <thead class="text-[var(--dim)] text-xs uppercase tracking-wider">
+            <tr class="border-b border-[var(--line)]">
+              <th class="text-left py-2">Client</th><th class="text-left py-2">Markup</th><th class="text-right py-2">Cost</th>
+            </tr>
+          </thead>
+          <tbody id="clientTable"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Models tab -->
+    <section id="tab-models" class="tab-panel hidden">
+      <h2 class="font-display text-lg font-semibold mb-4">Cost by model</h2>
+      <div class="panel p-5">
+        <canvas id="modelChart" height="120"></canvas>
+      </div>
+    </section>
+
+    <!-- Logs tab -->
+    <section id="tab-logs" class="tab-panel hidden">
+      <h2 class="font-display text-lg font-semibold mb-4">Recent requests</h2>
+      <div class="panel p-5 overflow-x-auto">
+        <table class="w-full text-sm font-mono">
+          <thead class="text-[var(--dim)] text-xs uppercase tracking-wider">
+            <tr class="border-b border-[var(--line)]">
+              <th class="text-left py-2 pr-4">Time</th><th class="text-left py-2 pr-4">Source</th>
+              <th class="text-left py-2 pr-4">Model</th><th class="text-right py-2 pr-4">Tokens</th>
+              <th class="text-right py-2">Cost</th>
+            </tr>
+          </thead>
+          <tbody id="logsTable"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+<script>
+const BASE = window.location.origin;
+let apiKey = localStorage.getItem('lcis_api_key') || '';
+document.getElementById('apiKeyInput').value = apiKey;
+
+document.querySelectorAll('.nav-item').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+    document.getElementById('tab-' + btn.dataset.tab).classList.remove('hidden');
+  });
+});
+
+async function apiGet(path){
+  const res = await fetch(BASE + path, { headers: { 'X-API-Key': apiKey } });
+  if(!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+function fmtMoney(n){ return '$' + Number(n).toFixed(6); }
+
+function gaugeColor(pct){
+  if(pct >= 100) return 'var(--red)';
+  if(pct >= 70) return 'var(--amber)';
+  return 'var(--teal)';
+}
+
+async function refreshAll(){
+  try{
+    const summary = await apiGet('/v1/analytics/summary');
+    document.getElementById('totalCost').textContent = fmtMoney(summary.total_cost);
+    document.getElementById('totalReq').textContent = summary.total_requests;
+    document.getElementById('totalTok').textContent = summary.total_tokens;
+
+    let budgetRules = [];
+    try{ budgetRules = await apiGet('/v1/budget/status'); }catch(e){ budgetRules = []; }
+
+    const clients = await apiGet('/v1/analytics/cost-by-client');
+    const meters = document.getElementById('clientMeters');
+    const table = document.getElementById('clientTable');
+    meters.innerHTML = ''; table.innerHTML = '';
+
+    clients.forEach(c => {
+      const rule = budgetRules.find(r => r.scope_type === 'client' && r.scope_id === c.client_id);
+      const pct = rule ? Math.min(100, Math.round((c.cost / rule.budget_amount) * 100)) : 0;
+      const color = gaugeColor(pct);
+
+      meters.insertAdjacentHTML('beforeend', `
+        <div class="panel p-5 flex items-center gap-4 tick-fade">
+          <div class="meter" style="--pct:${pct}; --gauge-color:${color}">
+            <span class="font-mono font-bold text-lg" style="color:${color}">${rule ? pct + '%' : '—'}</span>
+          </div>
+          <div>
+            <div class="font-display font-semibold">${c.client_name}</div>
+            <div class="font-mono text-sm text-[var(--dim)]">${fmtMoney(c.cost)}</div>
+            <div class="text-xs text-[var(--dim)]">${rule ? 'budget ' + fmtMoney(rule.budget_amount) + ' / ' + rule.period : 'no budget rule'}</div>
+          </div>
+        </div>
+      `);
+
+      table.insertAdjacentHTML('beforeend', `
+        <tr class="border-b border-[var(--line)]">
+          <td class="py-2">${c.client_name}</td>
+          <td class="py-2">${c.markup}%</td>
+          <td class="py-2 text-right">${fmtMoney(c.cost)}</td>
+        </tr>
+      `);
+    });
+
+    const models = await apiGet('/v1/analytics/cost-by-model');
+    const ctx = document.getElementById('modelChart');
+    if(window._modelChart) window._modelChart.destroy();
+    window._modelChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: models.map(m => m.provider + ' / ' + m.model),
+        datasets: [{ label: 'Cost ($)', data: models.map(m => m.cost), backgroundColor: '#F2A93B' }]
+      },
+      options: {
+        indexAxis: 'y',
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: '#23272E' }, ticks: { color: '#8B92A0' } },
+          y: { grid: { color: '#23272E' }, ticks: { color: '#8B92A0', font: { family: 'JetBrains Mono' } } }
+        }
+      }
+    });
+
+    const logs = await apiGet('/v1/analytics/logs?limit=50');
+    const logsTable = document.getElementById('logsTable');
+    logsTable.innerHTML = logs.map(l => `
+      <tr class="border-b border-[var(--line)]">
+        <td class="py-2 pr-4 text-[var(--dim)]">${new Date(l.timestamp).toLocaleString()}</td>
+        <td class="py-2 pr-4">${l.source}</td>
+        <td class="py-2 pr-4">${l.provider}/${l.model}</td>
+        <td class="py-2 pr-4 text-right">${l.tokens_used}</td>
+        <td class="py-2 text-right" style="color:var(--amber)">${fmtMoney(l.cost)}</td>
+      </tr>
+    `).join('');
+
+    document.getElementById('connStatus').innerHTML = '<span style="color:var(--teal)">● connected</span>';
+  }catch(e){
+    document.getElementById('connStatus').innerHTML = '<span style="color:var(--red)">● ' + (apiKey ? 'invalid key' : 'not connected') + '</span>';
+  }
+}
+
+document.getElementById('saveKeyBtn').addEventListener('click', () => {
+  apiKey = document.getElementById('apiKeyInput').value.trim();
+  localStorage.setItem('lcis_api_key', apiKey);
+  refreshAll();
+});
+
+if(apiKey) refreshAll();
+setInterval(() => { if(apiKey) refreshAll(); }, 8000);
+</script>
+</body>
+</html>
