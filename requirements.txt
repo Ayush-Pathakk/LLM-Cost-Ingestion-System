@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+pydantic
+pydantic-settings
+python-dotenv
+passlib[bcrypt]
+streamlit
+pandas
+openai
+google-generativeai
+tiktoken

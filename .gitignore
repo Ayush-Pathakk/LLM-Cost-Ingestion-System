@@ -1,0 +1,21 @@
+__pycache__/
+*.pyc
+.env
+lcis.db
+.venv/
+venv/
+*.egg-info/
+User_1 = {
+    client_id = 1,
+    name = Pathak,
+    password = Ayush,
+    key = lcis_-EZ2F3RyPSZzEEGYDYZz8jSdWt6PBHUxH1-NdqXhi8w  ,
+    }
+
+User_2 = {
+    client_id = 2,
+    name = Zoro,
+    password = Luffy,
+    key = lcis_T1anaa9LMdEF6LREf2u5Par-xWpQGthowxmP2NQ6rvE  ,
+    }
+
