@@ -21,6 +21,6 @@ app.include_router(ingest.router)
 app.include_router(budget.router)
 app.include_router(proxy.router)
 app.include_router(analytics.router)
-app.mount("/ui", StaticFiles(directory="static", html=True), name="ui")
+app.mount("/", StaticFiles(directory="static", html=True), name="")
 app.include_router(quota.router)
 
