@@ -5,3 +5,5 @@ from app.models.project import Project
 from app.models.api_key import APIKey
 from app.models.request_log import RequestLog
 from app.models.budget_rule import BudgetRule
+from app.models.ai_tool import AITool
+from app.models.tool_usage_log import ToolUsageLog

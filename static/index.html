@@ -50,6 +50,7 @@
     <button class="nav-item text-left px-3 py-2 rounded-md text-sm font-medium" data-tab="clients">Clients</button>
     <button class="nav-item text-left px-3 py-2 rounded-md text-sm font-medium" data-tab="models">Models</button>
     <button class="nav-item text-left px-3 py-2 rounded-md text-sm font-medium" data-tab="logs">Request Log</button>
+    <button class="nav-item text-left px-3 py-2 rounded-md text-sm font-medium" data-tab="quota">Free Quota</button>
     <div class="mt-auto text-xs text-[var(--dim)] font-mono leading-relaxed pt-4 border-t border-[var(--line)]">
       workspace key<br>
       <input id="apiKeyInput" type="password" placeholder="paste ingestion/API key"
@@ -122,6 +123,20 @@
           </thead>
           <tbody id="logsTable"></tbody>
         </table>
+      </div>
+    </section>
+
+    <!-- Quota tab -->
+    <section id="tab-quota" class="tab-panel hidden">
+      <h2 class="font-display text-lg font-semibold mb-1">Which free AI still has room?</h2>
+      <p class="text-sm text-[var(--dim)] mb-4">Tap a tool every time you use it — no login needed, works for anyone.</p>
+      <div id="quotaMeters" class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6"></div>
+      <div class="panel p-5">
+        <div class="text-xs uppercase tracking-widest text-[var(--dim)] mb-3">Log a use</div>
+        <div id="quotaButtons" class="flex gap-3 flex-wrap"></div>
+      </div>
+      <div class="text-xs text-[var(--dim)] leading-relaxed mt-4">
+        Limits shown are approximate, publicly-reported free-tier caps — providers change these often.
       </div>
     </section>
   </main>
@@ -238,6 +253,63 @@ document.getElementById('saveKeyBtn').addEventListener('click', () => {
   localStorage.setItem('lcis_api_key', apiKey);
   refreshAll();
 });
+
+// --- Free Quota tab (no API key required) ---
+async function apiPublic(path, method='GET'){
+  const res = await fetch(BASE + path, { method });
+  if(!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+async function ensureQuotaSeeded(){
+  const status = await apiPublic('/v1/quota/status');
+  if(status.length === 0){ await apiPublic('/v1/quota/seed', 'POST'); }
+}
+
+async function refreshQuota(){
+  const status = await apiPublic('/v1/quota/status');
+  const meters = document.getElementById('quotaMeters');
+  const buttons = document.getElementById('quotaButtons');
+  meters.innerHTML = ''; buttons.innerHTML = '';
+
+  const sorted = [...status].sort((a,b) => a.pct_used - b.pct_used);
+  const best = sorted[0];
+
+  status.forEach(t => {
+    const color = gaugeColor(t.pct_used);
+    const isBest = best && t.tool_name === best.tool_name && t.pct_used < 100;
+
+    meters.insertAdjacentHTML('beforeend', `
+      <div class="panel p-5 text-center tick-fade ${isBest ? 'ring-1 ring-[var(--teal)]' : ''}">
+        <div class="meter mx-auto" style="--pct:${t.pct_used}; --gauge-color:${color}">
+          <span class="font-mono font-bold text-lg" style="color:${color}">${t.pct_used}%</span>
+        </div>
+        <div class="font-display font-semibold mt-3">${t.tool_name}</div>
+        <div class="font-mono text-xs text-[var(--dim)] mt-1">${t.used}/${t.quota_limit} used · ${t.window_hours}h window</div>
+        <div class="text-xs mt-1" style="color:${color}">${t.remaining} left</div>
+        ${isBest ? '<div class="text-[10px] mt-2 text-[var(--teal)]">← most room right now</div>' : ''}
+      </div>
+    `);
+
+    buttons.insertAdjacentHTML('beforeend', `
+      <button data-tool="${t.tool_name}" class="quota-tap-btn bg-[var(--panel2)] hover:bg-[var(--line)] border border-[var(--line)] rounded-lg px-5 py-3 font-medium text-sm">
+        I used ${t.tool_name}
+      </button>
+    `);
+  });
+
+  document.querySelectorAll('.quota-tap-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      await apiPublic('/v1/quota/log/' + encodeURIComponent(btn.dataset.tool), 'POST');
+      refreshQuota();
+    });
+  });
+}
+
+(async () => {
+  try{ await ensureQuotaSeeded(); await refreshQuota(); }catch(e){ console.error(e); }
+})();
+setInterval(refreshQuota, 15000);
 
 if(apiKey) refreshAll();
 setInterval(() => { if(apiKey) refreshAll(); }, 8000);
