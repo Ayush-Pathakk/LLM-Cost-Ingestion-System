@@ -10,3 +10,4 @@ pandas
 openai
 google-generativeai
 tiktoken
+pydantic[email]
