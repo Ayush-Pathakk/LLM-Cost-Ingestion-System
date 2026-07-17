@@ -57,6 +57,23 @@
         class="w-full mt-1 bg-[var(--panel2)] border border-[var(--line)] rounded px-2 py-1.5 text-[var(--text)] text-xs font-mono focus:outline-none focus:border-[var(--amber)]">
       <button id="saveKeyBtn" class="mt-2 w-full bg-[var(--panel2)] hover:bg-[var(--line)] rounded px-2 py-1.5 text-xs">Connect</button>
       <div id="connStatus" class="mt-2 text-[10px]">not connected</div>
+
+      <button id="toggleRegisterBtn" class="mt-3 w-full text-[var(--amber)] hover:underline text-[10px] text-left">
+        New here? Create a workspace →
+      </button>
+
+      <div id="registerForm" class="hidden mt-3 space-y-1.5 border-t border-[var(--line)] pt-3">
+        <input id="regName" type="text" placeholder="your name"
+          class="w-full bg-[var(--panel2)] border border-[var(--line)] rounded px-2 py-1.5 text-[var(--text)] text-xs font-mono focus:outline-none focus:border-[var(--amber)]">
+        <input id="regEmail" type="email" placeholder="email"
+          class="w-full bg-[var(--panel2)] border border-[var(--line)] rounded px-2 py-1.5 text-[var(--text)] text-xs font-mono focus:outline-none focus:border-[var(--amber)]">
+        <input id="regPassword" type="password" placeholder="password"
+          class="w-full bg-[var(--panel2)] border border-[var(--line)] rounded px-2 py-1.5 text-[var(--text)] text-xs font-mono focus:outline-none focus:border-[var(--amber)]">
+        <input id="regWorkspace" type="text" placeholder="workspace name"
+          class="w-full bg-[var(--panel2)] border border-[var(--line)] rounded px-2 py-1.5 text-[var(--text)] text-xs font-mono focus:outline-none focus:border-[var(--amber)]">
+        <button id="registerBtn" class="w-full bg-[var(--amber)] text-black font-semibold rounded px-2 py-1.5 text-xs hover:opacity-90">Create workspace</button>
+        <div id="registerStatus" class="text-[10px] leading-relaxed"></div>
+      </div>
     </div>
   </aside>
 
@@ -252,6 +269,46 @@ document.getElementById('saveKeyBtn').addEventListener('click', () => {
   apiKey = document.getElementById('apiKeyInput').value.trim();
   localStorage.setItem('lcis_api_key', apiKey);
   refreshAll();
+});
+
+// --- Registration flow ---
+document.getElementById('toggleRegisterBtn').addEventListener('click', () => {
+  document.getElementById('registerForm').classList.toggle('hidden');
+});
+
+document.getElementById('registerBtn').addEventListener('click', async () => {
+  const statusEl = document.getElementById('registerStatus');
+  const name = document.getElementById('regName').value.trim();
+  const email = document.getElementById('regEmail').value.trim();
+  const password = document.getElementById('regPassword').value;
+  const workspace_name = document.getElementById('regWorkspace').value.trim();
+
+  if(!name || !email || !password || !workspace_name){
+    statusEl.innerHTML = '<span style="color:var(--red)">fill all fields</span>';
+    return;
+  }
+
+  statusEl.innerHTML = '<span style="color:var(--dim)">creating...</span>';
+  try{
+    const res = await fetch(BASE + '/v1/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, password, workspace_name })
+    });
+    if(!res.ok){
+      const err = await res.json();
+      throw new Error(err.detail || 'registration failed');
+    }
+    const data = await res.json();
+    apiKey = data.ingestion_key;
+    localStorage.setItem('lcis_api_key', apiKey);
+    document.getElementById('apiKeyInput').value = apiKey;
+    statusEl.innerHTML = `<span style="color:var(--teal)">connected! key saved.</span>`;
+    document.getElementById('registerForm').classList.add('hidden');
+    refreshAll();
+  }catch(e){
+    statusEl.innerHTML = '<span style="color:var(--red)">' + e.message + '</span>';
+  }
 });
 
 // --- Free Quota tab (no API key required) ---
